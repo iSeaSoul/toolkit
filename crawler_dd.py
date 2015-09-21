@@ -99,14 +99,21 @@ class CrawlerDD(object):
         page_id = 1
         while True:
             url = self.url_pattern % (self.blog_name, page_id)
-            content = self.open_page(url)
-            # print content
-            if not content:
-                self.sh.notice('Max page=%d for %s.' % (page_id - 1, self.blog_name))
+
+            retry_time = 1
+            failed = False
+            while True:
+                content = self.open_page(url)
+                # print content
+                if not content or ('<article' not in content):
+                    retry_time += 1
+                    if retry_time < 10:
+                        continue
+                    failed = True
+                    self.sh.notice('Max page=%d for %s.' % (page_id - 1, self.blog_name))
                 break
-            if '<article' not in content:
-                self.sh.notice('Max page=%d for %s.' % (page_id - 1, self.blog_name))
-                break
+
+            if failed: break
 
             self.process_main_page(content)
             page_id += 1
@@ -129,23 +136,30 @@ class CrawlerDD(object):
         self.add_to_index_page('./article_%03d.html' % (self.article_cnt, ), article_name)
         self.article_cnt += 1
 
-        content = self.open_page(article_link)
-        soup = BeautifulSoup(content)
+        retry_time = 1
 
-        article_content = soup.article
-        try:
-            f = open(file_name, 'w+') 
-            f.write('<h3>Original Link: <a href=%s>%s</a></h3>\n' % (article_link, article_link))
-            f.write(article_content.prettify().encode('gbk', 'ignore'))
-            f.close()
-        except:
-            import traceback
-            error_str = traceback.format_exc().replace('\n', '</p>\n<p>')
-            f = open(file_name, 'w+') 
-            f.write('<h2>Downloaded ERROR!</h2>\n')
-            f.write('<p>%s</p>' % (error_str, ))
-            f.write('<p>Please check <a href=%s>%s</a></p>\n' % (article_link, article_link))
-            f.close()
+        while True:
+            content = self.open_page(article_link)
+            soup = BeautifulSoup(content)
+
+            article_content = soup.article
+            try:
+                f = open(file_name, 'w+') 
+                f.write('<h3>Original Link: <a href=%s>%s</a></h3>\n' % (article_link, article_link))
+                f.write(article_content.prettify().encode('gbk', 'ignore'))
+                f.close()
+                break
+            except:
+                retry_time += 1
+                if retry_time >= 10:
+                    import traceback
+                    error_str = traceback.format_exc().replace('\n', '</p>\n<p>')
+                    f = open(file_name, 'w+') 
+                    f.write('<h2>Downloaded ERROR!</h2>\n')
+                    f.write('<p>%s</p>' % (error_str, ))
+                    f.write('<p>Please check <a href=%s>%s</a></p>\n' % (article_link, article_link))
+                    f.close()
+                    break
 
 def main():
     crawler = CrawlerDD('sky2sea')
